@@ -325,7 +325,7 @@
   <button class="lock b-admin" onclick="lock()">完成 · 鎖定</button>
   <button class="gold b-view" onclick="openPw()">🔒 管理</button>
   <button id="leaveEditBtn" class="b-leave" onclick="toggleLeaveEdit()"><span class="lv-locked">✏️ 開始預假</span><span class="lv-editing">✓ 完成預假</span></button>
-  <button class="leavebtn b-leave" onclick="endLeave()">結束預假(需密碼)</button>
+  <button class="leavebtn b-leave" onclick="endLeave()">結束預假模式(需密碼)</button>
   <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)">
 </div>
 
@@ -524,7 +524,7 @@ function closePw(){document.getElementById("pwOverlay").classList.remove("open")
 function submitPw(){if(document.getElementById("pwInput").value===ADMIN_PW){closePw();setMode("admin");if(db){try{db.ref("leaveOpen").set(false);}catch(e){}}}else{document.getElementById("pwErr").style.display="block";}}
 function lock(){setMode("view");document.getElementById("pwOverlay").classList.remove("open");}
 function openLeave(){ if(db){try{db.ref("leaveOpen").set(true);}catch(e){}} setMode("leave"); }
-function endLeave(){openPw();}  /* 結束預假需密碼,通過後回到管理模式 */
+function endLeave(){openPw();}  /* 結束預假模式需密碼,通過後回到管理模式 */
 
 const MOON='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 const SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M19.4 4.6l-1.7 1.7M6.3 17.7l-1.7 1.7"/></svg>';
