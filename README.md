@@ -33,7 +33,6 @@ https://qoo98989.github.io/vitauro/index.html
 資料庫為開放讀寫,任何有網址者皆可編輯。請**定期按「匯出備份」存 JSON 檔**;若資料被誤改,進管理模式按「匯入備份」即可還原。
 
 ## 🔒 隱私
-- 本檔內含的 Firebase apiKey 為公開金鑰,屬正常設計,不構成機密。
 - 班表資料不儲存於 GitHub,僅存於 Firebase。
 
 ---
