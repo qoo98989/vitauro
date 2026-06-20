@@ -67,6 +67,20 @@
   button.lock:hover{background:var(--navy-deep);color:#fff}
   button.leavebtn{border-color:#bfe0cf;color:#3f7a63;background:#e9f4ee}
   button.leavebtn:hover{filter:brightness(.97);color:#3f7a63}
+  /* 預假「開始/完成編輯」切換鈕:啟用編輯後變實心警示色 */
+  body.leave-editing button#leaveEditBtn{background:#d89a2e;border-color:#d89a2e;color:#fff}
+  body.leave-editing button#leaveEditBtn:hover{filter:brightness(.95);color:#fff}
+  /* 預假橫幅兩種訊息切換 + 編輯中改為警示琥珀色 */
+  .leavebanner .lv-editing{display:none}
+  body.leave-editing .leavebanner .lv-locked{display:none}
+  body.leave-editing .leavebanner .lv-editing{display:inline}
+  body.leave-editing .leavebanner{background:#fbf1da;border-bottom-color:#ecd6a3;color:#8a6a2c}
+  body.dark.leave-editing .leavebanner{background:#352a16;border-bottom-color:#574722;color:#dcc080}
+  body.leave-editing .leavebanner .dot{background:#d89a2e;animation:lvpulse2 1.8s infinite}
+  #leaveEditBtn .lv-editing{display:none}
+  body.leave-editing #leaveEditBtn .lv-locked{display:none}
+  body.leave-editing #leaveEditBtn .lv-editing{display:inline}
+  @keyframes lvpulse2{0%{box-shadow:0 0 0 0 rgba(216,154,46,.5)}70%{box-shadow:0 0 0 7px rgba(216,154,46,0)}100%{box-shadow:0 0 0 0 rgba(216,154,46,0)}}
   #themeBtn svg{width:15px;height:15px}
   .b-view,.b-admin,.b-leave,.b-va{display:none}
   body.m-view .b-view{display:inline-flex}
@@ -115,6 +129,8 @@
   td.cell{height:40px;font-size:13px;font-weight:600;color:var(--cell-ink);position:relative}
   body.m-admin td.cell,body.m-leave td.cell{cursor:pointer}
   body.m-admin td.cell:hover,body.m-leave td.cell:hover{outline:2px solid var(--gold);outline-offset:-2px}
+  body.m-leave:not(.leave-editing) td.cell{cursor:default}
+  body.m-leave:not(.leave-editing) td.cell:hover{outline:none}
   body.dragging td.cell:hover{outline:none}
   td.cell.sun{background:var(--sun)}
   td.cell.today{box-shadow:inset 2px 0 0 var(--gold),inset -2px 0 0 var(--gold)}
@@ -308,11 +324,12 @@
   <button class="leavebtn b-admin" onclick="openLeave()">開放預假</button>
   <button class="lock b-admin" onclick="lock()">完成 · 鎖定</button>
   <button class="gold b-view" onclick="openPw()">🔒 管理</button>
+  <button id="leaveEditBtn" class="b-leave" onclick="toggleLeaveEdit()"><span class="lv-locked">✏️ 開始預假</span><span class="lv-editing">✓ 完成預假</span></button>
   <button class="leavebtn b-leave" onclick="endLeave()">結束預假(需密碼)</button>
   <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)">
 </div>
 
-<div class="leavebanner"><span class="dot"></span><span>預假開放中　·　請點選你要休假的日期(再點一次可取消);也可按住拖曳一次選多天。完成後請通知店長。</span></div>
+<div class="leavebanner"><span class="dot"></span><span class="lv-locked">預假開放中　·　目前為唯讀,可安心瀏覽。要預假請先按上方「✏️ 開始預假」。</span><span class="lv-editing">編輯中　·　點空白格＝你的預假;再點一次可取消(會先確認,避免誤刪別人的)。⚠️ 小心不要動到別人的格子。完成請按「✓ 完成預假」並通知店長。</span></div>
 
 <div class="legend" id="legend"></div>
 
@@ -493,12 +510,15 @@ function initFirebase(){
 
 function setMode(m){
   mode=m;
-  document.body.classList.remove("m-view","m-admin","m-leave");
+  document.body.classList.remove("m-view","m-admin","m-leave","leave-editing");  // 進預假一律從「唯讀」開始
   document.body.classList.add("m-"+m);
   document.getElementById("modeBadge").textContent = m==="admin"?"管理模式":(m==="leave"?"預假模式":"檢視模式");
   if(m!=="admin"){["settingsOverlay","empOverlay"].forEach(id=>document.getElementById(id).classList.remove("open"));}
   closePicker();
 }
+/* 預假編輯鎖:預設唯讀,按「開始預假」才可點選 */
+function leaveLocked(){ return mode==="leave" && !document.body.classList.contains("leave-editing"); }
+function toggleLeaveEdit(){ document.body.classList.toggle("leave-editing"); clearSelection(); }
 function openPw(){document.getElementById("pwErr").style.display="none";const i=document.getElementById("pwInput");i.value="";document.getElementById("pwOverlay").classList.add("open");setTimeout(()=>i.focus(),50);}
 function closePw(){document.getElementById("pwOverlay").classList.remove("open");}
 function submitPw(){if(document.getElementById("pwInput").value===ADMIN_PW){closePw();setMode("admin");if(db){try{db.ref("leaveOpen").set(false);}catch(e){}}}else{document.getElementById("pwErr").style.display="block";}}
@@ -614,6 +634,7 @@ function updateSelection(si,di){
 }
 tableEl.addEventListener("mousedown",e=>{
   if(mode!=="admin"&&mode!=="leave")return;
+  if(leaveLocked())return;                      // 預假唯讀:未按「開始預假」不可點
   const td=e.target.closest("td.cell");if(!td)return;
   e.preventDefault();document.body.classList.add("dragging");
   drag.on=true;drag.aSi=+td.dataset.s;drag.aDi=+td.dataset.di;
@@ -635,7 +656,11 @@ tableEl.addEventListener("click",e=>{if(mode!=="admin")return;const nc=e.target.
 function applyLeave(sel){
   if(sel.length===1){
     const c=sel[0],k=c.name+"__"+c.iso,cur=state.grid[k];
-    if(cur===REST) delete state.grid[k];
+    if(cur===REST){
+      const d=c.iso.slice(5).replace("-","/");   // 06/21
+      if(!confirm("要取消「"+c.name+"」在 "+d+" 的預假嗎?")){ clearSelection();render();return; }
+      delete state.grid[k];
+    }
     else if(!cur) state.grid[k]=REST;
     // 若該格已有班別,不更動(保護已排班)
   }else{
@@ -658,6 +683,7 @@ tableEl.addEventListener("touchend",e=>{
   const moved=Math.abs(t.clientX-tStart.x)>12||Math.abs(t.clientY-tStart.y)>12;
   const target=tStart.target; tStart=null;
   if(moved||!target)return;          // 視為捲動,不處理
+  if(leaveLocked())return;           // 預假唯讀:未按「開始預假」不可點
   e.preventDefault();                 // 阻止瀏覽器合成 mouse 事件,避免重複觸發
   if(target.classList.contains("c-name")){ if(mode==="admin")openEmp(+target.dataset.si); return; }
   const si=+target.dataset.s, di=+target.dataset.di;
