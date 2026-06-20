@@ -3,7 +3,7 @@
 雲端即時同步的月班表系統。所有人開同一個網址即可檢視,店長可編輯,員工可線上預假,改動即時同步到每個人的畫面。
 
 ## 🔗 使用網址
-https://qoo98989.github.io/vitauro/Vita_v13.html
+https://qoo98989.github.io/vitauro/index.html
 
 打開即可使用,免登入、免安裝。手機、平板、電腦皆可。
 
