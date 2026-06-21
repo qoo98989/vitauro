@@ -673,7 +673,7 @@ function renderLegend(){
   let h='<span class="ttl">班別</span>';
   state.shifts.forEach(s=>h+=`<span class="it"><i class="sw" style="background:${s.color}"></i>${s.code} <small>${s.hours}h</small></span>`);
   h+=`<span class="it"><i class="sw rest-sw"></i>休</span>`;
-  h+=`<span class="it"><i class="sw rest-sw"></i><span class="srest-tx">特休</span></span>`;
+  h+=`<span class="it"><i class="sw rest-sw"></i>特休</span>`;
   h+=`<span class="it hint">·點格選班　·拖曳可一次選多格　·點姓名設定個別規則</span>`;
   document.getElementById("legend").innerHTML=h;
 }
