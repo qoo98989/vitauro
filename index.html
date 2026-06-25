@@ -17,6 +17,7 @@
     --rest:#f3bca6; --rest-line:#e09c7e; --rest-ink:#8f4a2a;
     --closed1:#edf0f4; --closed2:#e1e6ec; --closed-ink:#8a97a6;
     --srest:#0e7c86;
+    --mleave:#d4a0c8;
     --bad:#d0544c;
     --radius:12px;
     --font:-apple-system,"PingFang TC","Microsoft JhengHei","Noto Sans TC","Heiti TC",sans-serif;
@@ -30,6 +31,7 @@
     --ok:#79c2a0; --ok-soft:#1f3a2e; --warn:#e0926a; --warn-soft:#3a271d;
     --closed1:#222c39; --closed2:#2a3543; --closed-ink:#7d8a99;
     --srest:#5fc9d3;
+    --mleave:#e8b4e0;
     --sun:#312530; --sun-ink:#cf9aad;
     --bad:#e8645b;
   }
@@ -148,10 +150,13 @@
   td.cell.today{box-shadow:inset 2px 0 0 var(--gold),inset -2px 0 0 var(--gold)}
   td.cell.rest{color:var(--closed-ink);background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px)}
   td.cell.srest{color:var(--srest);font-weight:700}
+  td.cell.mleave{color:var(--mleave);font-weight:700}
   .sw.rest-sw{background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 4px,var(--closed2) 4px,var(--closed2) 8px);border-color:var(--line-strong)}
   .chip.rest-chip{background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px);color:var(--closed-ink)}
   .chip.srest-chip{background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px);color:var(--srest);font-weight:700}
+  .chip.mleave-chip{background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px);color:var(--mleave);font-weight:700}
   .srest-tx{color:var(--srest);font-weight:700}
+  .mleave-tx{color:var(--mleave);font-weight:700}
   td.cell.selected{box-shadow:inset 0 0 0 2px var(--gold),inset 0 0 0 200px rgba(194,161,104,.22)}
   td.cell.violation::after{content:"";position:absolute;top:0;right:0;border-width:0 8px 8px 0;border-style:solid;border-color:transparent var(--bad) transparent transparent}
   td.closed{height:40px;font-size:12px;font-weight:600;color:var(--closed-ink);cursor:default;
@@ -386,9 +391,8 @@
         <div class="field"><label>週期起始日</label><input id="setStart" type="date"></div>
         <div class="field"><label>週期天數</label><input id="setDays" type="number" min="7" max="40"></div>
       </div>
-      <div class="grid2">
-        <div class="field"><label>月休目標(天)</label><input id="setRest" type="number" min="0" max="20"></div>
-        <div class="field"><label>時數目標(小時)</label><input id="setHours" type="number" min="0"></div>
+      <div class="field" style="background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--gold-ink)">
+        ⚡ 目標時數與目標月休天數依據起始日/天數與國定假日<b>自動計算</b>，無需手動設定。
       </div>
       <div class="field">
         <label>員工名單</label>
@@ -437,7 +441,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
-const CLINIC_NAME="輝達診所", ADMIN_PW="v9968", SHIFT_DEF_VER=4;
+const CLINIC_NAME="輝達診所", ADMIN_PW="v9968", SHIFT_DEF_VER=5;
 const CANON_SHIFTS=[
   {code:"早", label:"早班", hours:7,   color:"#c7dcef", times:"09:00–12:00 / 14:00–17:00", knife:true},
   {code:"早1",label:"早1",  hours:4,   color:"#c8e7dd", times:"09:00–12:00", knife:true},
@@ -445,8 +449,48 @@ const CANON_SHIFTS=[
   {code:"晚2",label:"晚2",  hours:2.5, color:"#eccfe1", times:"17:30–20:00", knife:false},
   {code:"ALL",label:"ALL班",hours:9.5, color:"#e7c277", times:"09:00–12:00 / 14:00–17:00 / 17:30–20:00", knife:true}
 ];
+const MAX_SCHEDULES=12;
+/* ===== 台灣國定假日（紅字假日）===== */
+const TW_HOLIDAYS={
+  "2025-01-01":true,"2025-01-27":true,"2025-01-28":true,"2025-01-29":true,"2025-01-30":true,
+  "2025-01-31":true,"2025-02-28":true,"2025-04-03":true,"2025-04-04":true,"2025-04-05":true,
+  "2025-05-01":true,"2025-06-31":true,"2025-09-03":true,"2025-10-10":true,
+  "2026-01-01":true,"2026-01-26":true,"2026-01-27":true,"2026-01-28":true,"2026-01-29":true,
+  "2026-01-30":true,"2026-02-28":true,"2026-04-02":true,"2026-04-03":true,"2026-04-04":true,
+  "2026-05-01":true,"2026-06-19":true,"2026-09-03":true,"2026-10-10":true,
+  "2027-01-01":true,"2027-02-08":true,"2027-02-09":true,"2027-02-10":true,"2027-02-11":true,
+  "2027-02-12":true,"2027-02-28":true,"2027-04-02":true,"2027-04-03":true,"2027-04-04":true,
+  "2027-05-01":true,"2027-06-09":true,"2027-09-03":true,"2027-10-10":true
+};
+function isHoliday(iso){ return !!TW_HOLIDAYS[iso]; }
+
+/* ===== 計算某班表期間目標時數（扣除週六+假日後工作日×8）===== */
+function calcTargetHours(sch){
+  const [y,m,d]=sch.startDate.split("-").map(Number),base=new Date(y,m-1,d);
+  let workDays=0;
+  for(let i=0;i<sch.days;i++){
+    const dt=new Date(base.getFullYear(),base.getMonth(),base.getDate()+i);
+    const dow=dt.getDay();
+    const iso=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+    if(dow!==6 && !isHoliday(iso)) workDays++;
+  }
+  return workDays*8;
+}
+/* ===== 計算某班表期間目標月休（週六+假日總天數）===== */
+function calcTargetRest(sch){
+  const [y,m,d]=sch.startDate.split("-").map(Number),base=new Date(y,m-1,d);
+  let restDays=0;
+  for(let i=0;i<sch.days;i++){
+    const dt=new Date(base.getFullYear(),base.getMonth(),base.getDate()+i);
+    const dow=dt.getDay();
+    const iso=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+    if(dow===6 || isHoliday(iso)) restDays++;
+  }
+  return restDays;
+}
+
 const DEFAULT={
-  meta:{clinicName:CLINIC_NAME,targetHours:152,targetRest:9,shiftDefVer:SHIFT_DEF_VER},
+  meta:{clinicName:CLINIC_NAME,shiftDefVer:SHIFT_DEF_VER},
   shifts:JSON.parse(JSON.stringify(CANON_SHIFTS)),
   staff:[
     {title:"護理長",name:"于葇"},{title:"護理長",name:"倍巧"},
@@ -455,13 +499,21 @@ const DEFAULT={
     {title:"護理師",name:"子萍"},{title:"店長",name:"宛穎"}
   ],
   schedules:[
-    {id:"s1",name:"班表一",startDate:"2026-06-15",days:28,grid:{}},
-    {id:"s2",name:"班表二",startDate:"2026-06-15",days:28,grid:{}},
-    {id:"s3",name:"班表三",startDate:"2026-06-15",days:28,grid:{}}
+    {id:"s1",startDate:"2026-06-15",days:28,grid:{}},
+    {id:"s2",startDate:"2026-07-13",days:28,grid:{}},
+    {id:"s3",startDate:"2026-08-10",days:28,grid:{}},
+    {id:"s4",startDate:"2026-09-07",days:28,grid:{}},
+    {id:"s5",startDate:"2026-10-05",days:28,grid:{}},
+    {id:"s6",startDate:"2026-11-02",days:28,grid:{}},
+    {id:"s7",startDate:"2026-11-30",days:28,grid:{}},
+    {id:"s8",startDate:"2026-12-28",days:28,grid:{}},
+    {id:"s9",startDate:"2027-01-25",days:28,grid:{}},
+    {id:"s10",startDate:"2027-02-22",days:28,grid:{}},
+    {id:"s11",startDate:"2027-03-22",days:28,grid:{}},
+    {id:"s12",startDate:"2027-04-19",days:28,grid:{}}
   ]
 };
-const SCHED_NAMES=["班表一","班表二","班表三"];
-const REST="休", SREST="特休", STORE_KEY="clinic_schedule_v2", THEME_KEY="clinic_theme", LEAVE_KEY="clinic_leave_open", WD=["日","一","二","三","四","五","六"];
+const REST="休", SREST="特休", MLEAVE="產假", STORE_KEY="clinic_schedule_v2", THEME_KEY="clinic_theme", LEAVE_KEY="clinic_leave_open", WD=["日","一","二","三","四","五","六"];
 const SAT=6, SUNDAY=0;
 /* ===== Firebase 即時同步 ===== */
 const firebaseConfig = {
@@ -477,6 +529,14 @@ let db=null, fbReady=false, applyingRemote=false;
 
 let state=load(), DAYS=[], mode="view", activeId="s1";
 
+function schedDateLabel(sch){
+  /* 產生 "m/d~m/d" 格式的日期標籤 */
+  const [y,mo,d]=sch.startDate.split("-").map(Number);
+  const base=new Date(y,mo-1,d);
+  const last=new Date(y,mo-1,d+sch.days-1);
+  const fmt=dt=>(dt.getMonth()+1)+"/"+dt.getDate();
+  return fmt(base)+"~"+fmt(last);
+}
 function normalizeState(s){
   if(!s.meta)s.meta={};
   s.meta.clinicName=CLINIC_NAME;
@@ -484,22 +544,22 @@ function normalizeState(s){
   if(Array.isArray(s.staff)) s.staff.forEach(p=>{if(!Array.isArray(p.allow))p.allow=[];});
   // 多份班表化:把舊版單一 grid/startDate/days 轉成 schedules
   if(!Array.isArray(s.schedules)||!s.schedules.length){
-    s.schedules=[{id:"s1",name:"班表一",startDate:(s.meta&&s.meta.startDate)||"2026-06-15",days:(s.meta&&s.meta.days)||28,grid:s.grid||{}}];
+    s.schedules=[{id:"s1",startDate:(s.meta&&s.meta.startDate)||"2026-06-15",days:(s.meta&&s.meta.days)||28,grid:s.grid||{}}];
   }
-  // 固定三份,缺的補上(沿用第一份的起始日/天數,格子空白)
+  // 固定最多MAX_SCHEDULES份,缺的補上
   const base=s.schedules[0]||{startDate:"2026-06-15",days:28};
-  for(let i=0;i<3;i++){
+  for(let i=0;i<MAX_SCHEDULES;i++){
     const sc=s.schedules[i]||{};
     s.schedules[i]={
       id:"s"+(i+1),
-      name:sc.name||SCHED_NAMES[i],
       startDate:sc.startDate||base.startDate||"2026-06-15",
       days:sc.days||base.days||28,
       grid:(sc.grid&&typeof sc.grid==="object")?sc.grid:{}
     };
   }
-  s.schedules=s.schedules.slice(0,3);
+  s.schedules=s.schedules.slice(0,MAX_SCHEDULES);
   delete s.grid; if(s.meta){ delete s.meta.startDate; delete s.meta.days; }
+  // 移除舊的固定 targetHours/targetRest（現在自動計算）
   return s;
 }
 function curSch(){ return state.schedules.find(x=>x.id===activeId)||state.schedules[0]; }
@@ -593,7 +653,8 @@ function renderTabs(){
   tb.innerHTML=state.schedules.map(s=>{
     const act=s.id===activeId?" active":"";
     const dot=leaveFlags[s.id]?'<span class="tabdot" title="此班表預假開放中"></span>':'';
-    return `<button class="tabbtn${act}" onclick="switchSchedule('${s.id}')">${esc(s.name)}${dot}</button>`;
+    const label=schedDateLabel(s);
+    return `<button class="tabbtn${act}" onclick="switchSchedule('${s.id}')">${esc(label)}${dot}</button>`;
   }).join("");
 }
 
@@ -613,15 +674,20 @@ function dayList(){
 }
 function shiftByCode(c){return state.shifts.find(s=>s.code===c);}
 function fmt(o){return parseInt(o.iso.split("-")[1])+"/"+o.dd;}
-function personTarget(p){return (typeof p.targetHours==='number'&&p.targetHours>0)?p.targetHours:state.meta.targetHours;}
+function personTarget(p){
+  const autoH=calcTargetHours(curSch());
+  return (typeof p.targetHours==='number'&&p.targetHours>0)?p.targetHours:autoH;
+}
 function hasRule(p){return (p.allow&&p.allow.length)||(typeof p.targetHours==='number'&&p.targetHours>0)||(p.note&&p.note.trim());}
 
 function render(){
   DAYS=dayList();
   const days=DAYS,last=days[days.length-1],tIso=todayISO();
-  document.getElementById("periodLabel").textContent=curSch().name+"　"+fmt(days[0])+" ～ "+fmt(last);
-  document.getElementById("gRest").textContent=state.meta.targetRest;
-  document.getElementById("gHours").textContent=state.meta.targetHours;
+  const autoH=calcTargetHours(curSch());
+  const autoR=calcTargetRest(curSch());
+  document.getElementById("periodLabel").textContent=schedDateLabel(curSch());
+  document.getElementById("gRest").textContent=autoR;
+  document.getElementById("gHours").textContent=autoH;
   document.getElementById("printMeta").innerHTML="<b style='font-size:14px;letter-spacing:2px'>排班表</b>　"+fmt(days[0])+" ～ "+fmt(last);
   renderTabs();renderLegend();renderShiftDoc();
   const t=document.getElementById("schedule");
@@ -640,19 +706,37 @@ function render(){
     body+=`<tr><td class="c-title">${p.title||""}</td><td class="c-name" data-si="${si}" title="點此設定個別規則">${p.name}${rd}</td>`;
     let hours=0,rest=0;
     days.forEach((o,di)=>{
-      if(o.dow===SAT){ body+=`<td class="closed" title="週六店休">休</td>`; return; }
+      if(o.dow===SAT){
+        body+=`<td class="closed" title="週六店休">休</td>`;
+        rest++; // 週六公休算進月休
+        return;
+      }
+      if(isHoliday(o.iso)){
+        // 國定假日：格子與一般工作日相同，可正常排班，只影響目標計算
+        const key=p.name+"__"+o.iso,code=curSch().grid[key]||"";
+        let cls="cell",style="",txt=code,ttl="";
+        if(o.dow===SUNDAY)cls+=" sun"; if(o.iso===tIso)cls+=" today";
+        if(code===REST){cls+=" rest";rest++;txt="休";}
+        else if(code===SREST){cls+=" rest srest";rest++;txt="特休";}
+        else if(code===MLEAVE){cls+=" rest mleave";rest++;txt="產假";}
+        else if(code){const sh=shiftByCode(code);if(sh){hours+=sh.hours;style=`background:${sh.color}`;}
+          if(p.allow&&p.allow.length&&!p.allow.includes(code)){cls+=" violation";ttl=' title="此班別不在該員工的可上班別內"';}}
+        body+=`<td class="${cls}" style="${style}" data-s="${si}" data-di="${di}" data-iso="${o.iso}"${ttl}>${txt}</td>`;
+        return;
+      }
       const key=p.name+"__"+o.iso,code=curSch().grid[key]||"";
       let cls="cell",style="",txt=code,ttl="";
       if(o.dow===SUNDAY)cls+=" sun"; if(o.iso===tIso)cls+=" today";
       if(code===REST){cls+=" rest";rest++;txt="休";}
       else if(code===SREST){cls+=" rest srest";rest++;txt="特休";}
+      else if(code===MLEAVE){cls+=" rest mleave";rest++;txt="產假";}
       else if(code){const sh=shiftByCode(code);if(sh){hours+=sh.hours;style=`background:${sh.color}`;}
         if(p.allow&&p.allow.length&&!p.allow.includes(code)){cls+=" violation";ttl=' title="此班別不在該員工的可上班別內"';}}
       body+=`<td class="${cls}" style="${style}" data-s="${si}" data-di="${di}" data-iso="${o.iso}"${ttl}>${txt}</td>`;
     });
     const hours1=+hours.toFixed(1),tgt=personTarget(p),hDiff=+(hours-tgt).toFixed(1);
     const hPill=Math.abs(hDiff)<=0.01?`<span class="pill ok">${hours1}</span>`:`<span class="pill warn">${hours1} (${hDiff>0?"+":""}${hDiff})</span>`;
-    const rPill=rest===state.meta.targetRest?`<span class="pill ok">${rest}</span>`:`<span class="pill warn">${rest}</span>`;
+    const rPill=rest===autoR?`<span class="pill ok">${rest}</span>`:`<span class="pill warn">${rest}</span>`;
     body+=`<td class="c-total">${hPill}</td><td class="c-rest">${rPill}</td></tr>`;
   });
   body+="</tbody>";
@@ -660,7 +744,7 @@ function render(){
   let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">上班人數</td>`;
   days.forEach(o=>{
     if(o.dow===SAT){foot+=`<td class="closed">—</td>`;return;}
-    let n=0;state.staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST)n++;});
+    let n=0;state.staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
     let cls="";if(o.dow===SUNDAY)cls="sun";if(n<=1)cls+=" lo";foot+=`<td class="${cls}">${n}</td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
@@ -673,7 +757,8 @@ function renderLegend(){
   let h='<span class="ttl">班別</span>';
   state.shifts.forEach(s=>h+=`<span class="it"><i class="sw" style="background:${s.color}"></i>${s.code} <small>${s.hours}h</small></span>`);
   h+=`<span class="it"><i class="sw rest-sw"></i>休</span>`;
-  h+=`<span class="it"><i class="sw rest-sw"></i>特休</span>`;
+  h+=`<span class="it"><i class="sw rest-sw"></i><span class="srest-tx">特休</span></span>`;
+  h+=`<span class="it"><i class="sw rest-sw"></i><span class="mleave-tx">產假</span></span>`;
   h+=`<span class="it hint">·點格選班　·拖曳可一次選多格　·點姓名設定個別規則</span>`;
   document.getElementById("legend").innerHTML=h;
 }
@@ -688,7 +773,7 @@ function renderShiftDoc(){
   document.getElementById("shiftdoc").innerHTML=
     `<div class="sd-head"><span class="sd-bar"></span><h3>班別說明</h3></div>
      <div class="sd-list">${rows}</div>
-     <div class="sd-notes"><span>週六店休</span><span>週日無早1</span><span>「刀」= 該班別含刀</span><span><span class="srest-tx">特休</span> 由店長安排,計入月休</span></div>`;
+     <div class="sd-notes"><span>週六店休</span><span>週日無早1</span><span>「刀」= 該班別含刀</span><span><span class="srest-tx">特休</span> 由店長安排,計入月休</span><span><span class="mleave-tx">產假</span> 計入月休</span></div>`;
 }
 
 const tableEl=document.getElementById("schedule");
@@ -776,6 +861,7 @@ function openPicker(){
   list.forEach(s=>h+=`<div class="chip" style="background:${s.color}" onclick="setCell('${s.code}')">${s.code}<small>${s.hours}h</small></div>`);
   h+=`<div class="chip rest-chip" onclick="setCell('${REST}')">休<small>&nbsp;</small></div>`;
   h+=`<div class="chip srest-chip" onclick="setCell('${SREST}')">特休<small>&nbsp;</small></div>`;
+  h+=`<div class="chip mleave-chip" onclick="setCell('${MLEAVE}')">產假<small>&nbsp;</small></div>`;
   h+=`<div class="chip" onclick="setCell('')">清除<small>&nbsp;</small></div>`;
   document.getElementById("pickerRow").innerHTML=h;
   document.querySelector("#picker b").textContent=selection.length>1?`套用到 ${selection.length} 格`:"選擇班別";
@@ -824,7 +910,7 @@ function resetEmp(){if(empIndex<0)return;const p=state.staff[empIndex];p.allow=[
 
 function autoFill(){
   if(!confirm("自動填入空格會把空白格子平均排上休假與預設班別當起點(已填的不動,週六店休自動跳過)。\n會盡量避開每位員工不可上的班別。之後請依實際情況微調時數。要繼續嗎?"))return;
-  const days=dayList().filter(o=>o.dow!==SAT),restTarget=state.meta.targetRest;
+  const days=dayList().filter(o=>o.dow!==SAT&&!isHoliday(o.iso)),restTarget=calcTargetRest(curSch());
   state.staff.forEach((p,si)=>{
     const allow=(p.allow&&p.allow.length)?p.allow:state.shifts.map(s=>s.code);
     const def=allow.find(c=>c!=="早1")||allow[0]||"早";
@@ -889,18 +975,20 @@ function buildScheduleCanvas(){
     cell(x,y,P.name,rowH,"#fff",p.name,C.ink,13,"600","left");x+=P.name;
     let hours=0,rest=0;
     days.forEach(o=>{
-      if(o.dow===SAT){stripe(x,y,P.day,rowH);ctx.fillStyle=C.muted;ctx.font=F(12,"600");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("休",x+P.day/2,y+rowH/2);x+=P.day;return;}
+      if(o.dow===SAT){stripe(x,y,P.day,rowH);ctx.fillStyle=C.muted;ctx.font=F(12,"600");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("休",x+P.day/2,y+rowH/2);rest++;x+=P.day;return;}
       const code=curSch().grid[p.name+"__"+o.iso]||"";
       if(code===REST){stripe(x,y,P.day,rowH);ctx.fillStyle=C.muted;ctx.font=F(12,"600");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("休",x+P.day/2,y+rowH/2);rest++;}
       else if(code===SREST){stripe(x,y,P.day,rowH);ctx.fillStyle="#0e7c86";ctx.font=F(11,"700");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("特休",x+P.day/2,y+rowH/2);rest++;}
+      else if(code===MLEAVE){stripe(x,y,P.day,rowH);ctx.fillStyle="#d4a0c8";ctx.font=F(11,"700");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("產假",x+P.day/2,y+rowH/2);rest++;}
       else if(code){const sh=shiftByCode(code);const bg=sh?sh.color:(o.dow===SUNDAY?C.sun:"#fff");if(sh)hours+=sh.hours;cell(x,y,P.day,rowH,bg,code,C.ink,12,"700");}
       else cell(x,y,P.day,rowH,o.dow===SUNDAY?C.sun:"#fff","",C.ink);
       x+=P.day;
     });
     const tgt=personTarget(p),diff=+(hours-tgt).toFixed(1);
     const ht=Math.abs(diff)<=0.01?(""+ +hours.toFixed(1)):(+hours.toFixed(1))+" ("+(diff>0?"+":"")+diff+")";
+    const autoR=calcTargetRest(curSch());
     cell(x,y,P.total,rowH,"#fff",ht,Math.abs(diff)<=0.01?C.ok:C.warn,11,"600");x+=P.total;
-    cell(x,y,P.rest,rowH,"#fff",String(rest),rest===state.meta.targetRest?C.ok:C.warn,12,"600");x+=P.rest;
+    cell(x,y,P.rest,rowH,"#fff",String(rest),rest===autoR?C.ok:C.warn,12,"600");x+=P.rest;
     y+=rowH;
   });
 
@@ -909,7 +997,7 @@ function buildScheduleCanvas(){
   cell(x,y,P.name,footH,C.foot,"每日上班人數",C.muted,11,"600");x+=P.name;
   days.forEach(o=>{
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
-    let n=0;staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST)n++;});
+    let n=0;staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
     cell(x,y,P.day,footH,o.dow===SUNDAY?C.sun:C.foot,String(n),n<=1?C.warn:C.muted,11,"600");x+=P.day;
   });
   cell(x,y,P.total,footH,C.foot,"",C.muted);x+=P.total;
@@ -983,8 +1071,6 @@ function moveRow(btn,dir){const row=btn.closest(".erow"),pa=row.parentElement;if
 function openSettings(){
   document.getElementById("setStart").value=curSch().startDate;
   document.getElementById("setDays").value=curSch().days;
-  document.getElementById("setRest").value=state.meta.targetRest;
-  document.getElementById("setHours").value=state.meta.targetHours;
   renderStaffRows();renderShiftRows();
   document.getElementById("settingsOverlay").classList.add("open");
 }
@@ -994,8 +1080,6 @@ function saveSettings(){
   state.meta.clinicName=CLINIC_NAME;
   curSch().startDate=document.getElementById("setStart").value||curSch().startDate;
   curSch().days=Math.max(7,Math.min(40,parseInt(document.getElementById("setDays").value)||28));
-  state.meta.targetRest=parseInt(document.getElementById("setRest").value)||0;
-  state.meta.targetHours=parseFloat(document.getElementById("setHours").value)||0;
   const oldStaff=state.staff.slice();
   const staff=[...document.querySelectorAll("#staffRows .erow")].map(row=>{
     const title=row.querySelector(".f-title").value.trim();
