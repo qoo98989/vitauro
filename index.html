@@ -472,11 +472,11 @@ function calcTargetHours(sch){
     const dt=new Date(base.getFullYear(),base.getMonth(),base.getDate()+i);
     const dow=dt.getDay();
     const iso=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
-    if(dow!==6 && !isHoliday(iso)) workDays++;
+    if(dow!==0 && dow!==6 && !isHoliday(iso)) workDays++;
   }
   return workDays*8;
 }
-/* ===== 計算某班表期間目標月休（週六+假日總天數）===== */
+/* ===== 計算某班表期間目標月休（六日總數 + 國定假日，不重複計算）===== */
 function calcTargetRest(sch){
   const [y,m,d]=sch.startDate.split("-").map(Number),base=new Date(y,m-1,d);
   let restDays=0;
@@ -484,7 +484,7 @@ function calcTargetRest(sch){
     const dt=new Date(base.getFullYear(),base.getMonth(),base.getDate()+i);
     const dow=dt.getDay();
     const iso=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
-    if(dow===6 || isHoliday(iso)) restDays++;
+    if(dow===0 || dow===6 || isHoliday(iso)) restDays++;
   }
   return restDays;
 }
