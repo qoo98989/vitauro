@@ -393,6 +393,7 @@
       </div>
       <div class="field" style="background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--gold-ink)">
         ⚡ 目標時數與目標月休天數依據起始日/天數與國定假日<b>自動計算</b>，無需手動設定。
+        <div id="holidayNote" style="margin-top:8px;font-size:12px;line-height:1.5;color:#c0803a">⏳ 正在載入台灣國定假日…</div>
       </div>
       <div class="field">
         <label>員工名單</label>
@@ -451,18 +452,85 @@ const CANON_SHIFTS=[
 ];
 const MAX_SCHEDULES=12;
 /* ===== 台灣國定假日（紅字假日）===== */
-const TW_HOLIDAYS={
-  "2025-01-01":true,"2025-01-27":true,"2025-01-28":true,"2025-01-29":true,"2025-01-30":true,
-  "2025-01-31":true,"2025-02-28":true,"2025-04-03":true,"2025-04-04":true,"2025-04-05":true,
-  "2025-05-01":true,"2025-06-31":true,"2025-09-03":true,"2025-10-10":true,
-  "2026-01-01":true,"2026-01-26":true,"2026-01-27":true,"2026-01-28":true,"2026-01-29":true,
-  "2026-01-30":true,"2026-02-28":true,"2026-04-02":true,"2026-04-03":true,"2026-04-04":true,
-  "2026-05-01":true,"2026-06-19":true,"2026-09-03":true,"2026-10-10":true,
-  "2027-01-01":true,"2027-02-08":true,"2027-02-09":true,"2027-02-10":true,"2027-02-11":true,
-  "2027-02-12":true,"2027-02-28":true,"2027-04-02":true,"2027-04-03":true,"2027-04-04":true,
-  "2027-05-01":true,"2027-06-09":true,"2027-09-03":true,"2027-10-10":true
+/* ===== 台灣國定假日 =====
+   線上：自動抓取政府行政機關辦公日曆表（ruyut/TaiwanCalendar，資料源：行政院人事行政總處）
+   離線：使用下方內建後備清單。抓取成功後會覆蓋後備清單並重新計算。          */
+let TW_HOLIDAYS={
+  // 內建後備（離線時使用；線上會被自動抓取的官方資料覆蓋）
+  "2026-01-01":1,"2026-02-16":1,"2026-02-17":1,"2026-02-18":1,"2026-02-19":1,
+  "2026-02-20":1,"2026-02-27":1,"2026-02-28":1,"2026-04-03":1,"2026-04-04":1,
+  "2026-04-05":1,"2026-04-06":1,"2026-05-01":1,"2026-06-19":1,"2026-09-25":1,
+  "2026-09-28":1,"2026-10-09":1,"2026-10-10":1,"2026-10-25":1,"2026-10-26":1,"2026-12-25":1,
+  "2027-01-01":1,"2027-02-06":1,"2027-02-07":1,"2027-02-08":1,"2027-02-09":1,
+  "2027-02-10":1,"2027-02-11":1,"2027-02-12":1,"2027-02-28":1,"2027-03-01":1,
+  "2027-04-02":1,"2027-04-05":1,"2027-05-01":1,"2027-06-09":1,"2027-09-15":1,
+  "2027-09-28":1,"2027-10-10":1,"2027-10-11":1,"2027-10-25":1,"2027-12-25":1
 };
+let holidaySource="fallback"; // 'live' 已抓到官方資料 / 'fallback' 使用內建清單
 function isHoliday(iso){ return !!TW_HOLIDAYS[iso]; }
+
+/* 從班表清單推算需要抓取的年份範圍 */
+function neededYears(){
+  const ys=new Set();
+  (state.schedules||[]).forEach(s=>{
+    if(!s.startDate) return;
+    const [y,m,d]=s.startDate.split("-").map(Number);
+    const base=new Date(y,m-1,d), last=new Date(y,m-1,d+(s.days||28)-1);
+    ys.add(base.getFullYear()); ys.add(last.getFullYear());
+  });
+  if(!ys.size) ys.add(new Date().getFullYear());
+  return [...ys].sort();
+}
+
+/* 抓取單一年度並併入 TW_HOLIDAYS */
+async function fetchYearHolidays(year){
+  const url="https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/"+year+".json";
+  const res=await fetch(url,{cache:"force-cache"});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const data=await res.json();
+  const map={};
+  data.forEach(e=>{
+    // 只取「放假且有節日說明」者為國定假日（純週末無 description，補假亦計入放假）
+    if(e.isHoliday && e.description && e.description.trim()){
+      const s=e.date; // YYYYMMDD
+      map[s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8)]=1;
+    }
+  });
+  return map;
+}
+
+/* 啟動時自動抓取所有需要的年份；成功則覆蓋後備清單並重繪 */
+async function loadHolidays(){
+  const years=neededYears();
+  try{
+    const results=await Promise.all(years.map(y=>fetchYearHolidays(y).catch(()=>null)));
+    const merged={}; let ok=0;
+    results.forEach(m=>{ if(m){ ok++; Object.assign(merged,m); } });
+    if(ok>0){
+      TW_HOLIDAYS=merged; holidaySource="live";
+      setHolidayNote("live", years);
+      if(typeof render==="function") render();
+      return;
+    }
+    throw new Error("all failed");
+  }catch(e){
+    holidaySource="fallback";
+    setHolidayNote("fallback", years);
+  }
+}
+
+/* 在設定面板顯示假日資料來源狀態 */
+function setHolidayNote(kind, years){
+  const el=document.getElementById("holidayNote");
+  if(!el) return;
+  if(kind==="live"){
+    el.innerHTML="✅ 已自動載入台灣國定假日（"+years.join("、")+" 年，官方行事曆）";
+    el.style.color="#1a7a4a";
+  }else{
+    el.innerHTML="⚠️ 無法連線更新假日，改用內建清單（可能不含最新補假／調整，建議連網後重新整理）";
+    el.style.color="#c0803a";
+  }
+}
 
 /* ===== 計算某班表期間目標時數（扣除週六+假日後工作日×8）===== */
 function calcTargetHours(sch){
@@ -694,7 +762,7 @@ function render(){
 
   let head=`<thead><tr><th class="c-title">職稱</th><th class="c-name">姓名</th>`;
   days.forEach(o=>{
-    let cls="day-col";if(o.dow===SUNDAY)cls+=" sun";if(o.dow===SAT)cls+=" closed";if(o.iso===tIso)cls+=" today";
+    let cls="day-col";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";if(o.dow===SAT)cls+=" closed";if(o.iso===tIso)cls+=" today";
     const tag=o.dow===SAT?'<div class="closedtag">店休</div>':'';
     head+=`<th class="${cls}"><div class="dnum">${o.dd}</div><div class="dow">${o.label}</div>${tag}</th>`;
   });
@@ -712,10 +780,10 @@ function render(){
         return;
       }
       if(isHoliday(o.iso)){
-        // 國定假日：格子與一般工作日相同，可正常排班，只影響目標計算
+        // 國定假日：比照星期日樣式（淡底），格子仍可正常排班，並影響目標計算
         const key=p.name+"__"+o.iso,code=curSch().grid[key]||"";
-        let cls="cell",style="",txt=code,ttl="";
-        if(o.dow===SUNDAY)cls+=" sun"; if(o.iso===tIso)cls+=" today";
+        let cls="cell sun",style="",txt=code,ttl="";
+        if(o.iso===tIso)cls+=" today";
         if(code===REST){cls+=" rest";rest++;txt="休";}
         else if(code===SREST){cls+=" rest srest";rest++;txt="特休";}
         else if(code===MLEAVE){cls+=" rest mleave";rest++;txt="產假";}
@@ -745,7 +813,7 @@ function render(){
   days.forEach(o=>{
     if(o.dow===SAT){foot+=`<td class="closed">—</td>`;return;}
     let n=0;state.staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
-    let cls="";if(o.dow===SUNDAY)cls="sun";if(n<=1)cls+=" lo";foot+=`<td class="${cls}">${n}</td>`;
+    let cls="";if(o.dow===SUNDAY||isHoliday(o.iso))cls="sun";if(n<=1)cls+=" lo";foot+=`<td class="${cls}">${n}</td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
 
@@ -957,9 +1025,9 @@ function buildScheduleCanvas(){
   cell(x,y,P.title,headH,C.headBg,"職稱",C.headInk,12,"600");x+=P.title;
   cell(x,y,P.name,headH,C.headBg,"姓名",C.headInk,12,"600");x+=P.name;
   days.forEach(o=>{
-    let bg=C.headBg; if(o.dow===SUNDAY)bg=C.sun; if(o.dow===SAT)bg="#e6eaef";
+    let bg=C.headBg; if(o.dow===SUNDAY||isHoliday(o.iso))bg=C.sun; if(o.dow===SAT)bg="#e6eaef";
     ctx.fillStyle=bg;ctx.fillRect(x,y,P.day,headH);ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,P.day,headH);
-    ctx.fillStyle=o.dow===SUNDAY?C.sunInk:(o.dow===SAT?C.muted:C.headInk);ctx.textAlign="center";ctx.textBaseline="alphabetic";
+    ctx.fillStyle=(o.dow===SUNDAY||isHoliday(o.iso))?C.sunInk:(o.dow===SAT?C.muted:C.headInk);ctx.textAlign="center";ctx.textBaseline="alphabetic";
     ctx.font=F(13,"700");ctx.fillText(o.dd,x+P.day/2,y+18);
     ctx.font=F(10,"400");ctx.fillText(o.label,x+P.day/2,y+31);
     if(o.dow===SAT){ctx.font=F(8,"400");ctx.fillText("店休",x+P.day/2,y+41);}
@@ -980,8 +1048,8 @@ function buildScheduleCanvas(){
       if(code===REST){stripe(x,y,P.day,rowH);ctx.fillStyle=C.muted;ctx.font=F(12,"600");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("休",x+P.day/2,y+rowH/2);rest++;}
       else if(code===SREST){stripe(x,y,P.day,rowH);ctx.fillStyle="#0e7c86";ctx.font=F(11,"700");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("特休",x+P.day/2,y+rowH/2);rest++;}
       else if(code===MLEAVE){stripe(x,y,P.day,rowH);ctx.fillStyle="#d4a0c8";ctx.font=F(11,"700");ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("產假",x+P.day/2,y+rowH/2);rest++;}
-      else if(code){const sh=shiftByCode(code);const bg=sh?sh.color:(o.dow===SUNDAY?C.sun:"#fff");if(sh)hours+=sh.hours;cell(x,y,P.day,rowH,bg,code,C.ink,12,"700");}
-      else cell(x,y,P.day,rowH,o.dow===SUNDAY?C.sun:"#fff","",C.ink);
+      else if(code){const sh=shiftByCode(code);const bg=sh?sh.color:((o.dow===SUNDAY||isHoliday(o.iso))?C.sun:"#fff");if(sh)hours+=sh.hours;cell(x,y,P.day,rowH,bg,code,C.ink,12,"700");}
+      else cell(x,y,P.day,rowH,(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:"#fff","",C.ink);
       x+=P.day;
     });
     const tgt=personTarget(p),diff=+(hours-tgt).toFixed(1);
@@ -998,7 +1066,7 @@ function buildScheduleCanvas(){
   days.forEach(o=>{
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
     let n=0;staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
-    cell(x,y,P.day,footH,o.dow===SUNDAY?C.sun:C.foot,String(n),n<=1?C.warn:C.muted,11,"600");x+=P.day;
+    cell(x,y,P.day,footH,(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:C.foot,String(n),n<=1?C.warn:C.muted,11,"600");x+=P.day;
   });
   cell(x,y,P.total,footH,C.foot,"",C.muted);x+=P.total;
   cell(x,y,P.rest,footH,C.foot,"",C.muted);x+=P.rest;
@@ -1115,6 +1183,7 @@ applyTheme(savedTheme);
 applyMode();
 render();
 initFirebase();
+loadHolidays();   // 自動抓取台灣國定假日（線上）；失敗則沿用內建後備清單
 </script>
 </body>
 </html>
