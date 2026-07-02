@@ -131,6 +131,7 @@
   thead th.closed{background:var(--closed2);color:var(--closed-ink)}
   body.dark thead th.today{background:#34301d;color:#d9bf7c}
   .closedtag{font-size:9px;letter-spacing:1px;margin-top:1px;opacity:.85}
+  .holidaytag{font-size:8px;letter-spacing:0;margin-top:1px;color:#c0392b;font-weight:600;line-height:1;white-space:nowrap}
   .c-title{position:sticky;left:0;z-index:30;background:var(--head-bg);min-width:60px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:600}
   .c-name{position:sticky;left:60px;z-index:30;background:var(--surface);min-width:84px;padding:0 12px;font-weight:600;text-align:left;border-right:2px solid var(--line-strong);letter-spacing:1px}
   body.m-admin tbody td.c-name{cursor:pointer}
@@ -303,7 +304,7 @@
     .day-col{min-width:0}
     td.cell,td.closed{height:24px;font-size:9px}
     thead th{height:32px;font-size:8px}
-    .dnum{font-size:9px}.dow{font-size:7px}.closedtag{font-size:6px}
+    .dnum{font-size:9px}.dow{font-size:7px}.closedtag{font-size:6px}.holidaytag{font-size:5.5px}
     .c-name{min-width:0;font-size:9px;letter-spacing:0;padding:0 3px}
     .c-title{min-width:0;font-size:8px;padding:0 2px}
     .c-total,.c-rest{min-width:0;font-size:9px;padding:0 2px}
@@ -456,15 +457,15 @@ const MAX_SCHEDULES=12;
    線上：自動抓取政府行政機關辦公日曆表（ruyut/TaiwanCalendar，資料源：行政院人事行政總處）
    離線：使用下方內建後備清單。抓取成功後會覆蓋後備清單並重新計算。          */
 let TW_HOLIDAYS={
-  // 內建後備（離線時使用；線上會被自動抓取的官方資料覆蓋）
-  "2026-01-01":1,"2026-02-16":1,"2026-02-17":1,"2026-02-18":1,"2026-02-19":1,
-  "2026-02-20":1,"2026-02-27":1,"2026-02-28":1,"2026-04-03":1,"2026-04-04":1,
-  "2026-04-05":1,"2026-04-06":1,"2026-05-01":1,"2026-06-19":1,"2026-09-25":1,
-  "2026-09-28":1,"2026-10-09":1,"2026-10-10":1,"2026-10-25":1,"2026-10-26":1,"2026-12-25":1,
-  "2027-01-01":1,"2027-02-06":1,"2027-02-07":1,"2027-02-08":1,"2027-02-09":1,
-  "2027-02-10":1,"2027-02-11":1,"2027-02-12":1,"2027-02-28":1,"2027-03-01":1,
-  "2027-04-02":1,"2027-04-05":1,"2027-05-01":1,"2027-06-09":1,"2027-09-15":1,
-  "2027-09-28":1,"2027-10-10":1,"2027-10-11":1,"2027-10-25":1,"2027-12-25":1
+  // 內建後備（離線時使用；線上會被自動抓取的官方資料覆蓋）。值 = 簡短節日名稱，補假為空白" "
+  "2026-01-01":"元旦","2026-02-15":"小年夜","2026-02-16":"除夕","2026-02-17":"春節","2026-02-18":"春節","2026-02-19":"春節",
+  "2026-02-20":" ","2026-02-27":" ","2026-02-28":"和平日","2026-04-03":" ","2026-04-04":"兒童節",
+  "2026-04-05":"清明","2026-04-06":" ","2026-05-01":"勞動節","2026-06-19":"端午","2026-09-25":"中秋",
+  "2026-09-28":"教師節","2026-10-09":" ","2026-10-10":"國慶","2026-10-25":"光復節","2026-10-26":" ","2026-12-25":"行憲日",
+  "2027-01-01":"元旦","2027-02-04":"小年夜","2027-02-05":"除夕","2027-02-06":"春節","2027-02-07":"春節","2027-02-08":"春節",
+  "2027-02-09":" ","2027-02-10":" ","2027-02-28":"和平日","2027-03-01":" ",
+  "2027-04-04":"兒童節","2027-04-05":"清明","2027-04-06":" ","2027-04-30":" ","2027-05-01":"勞動節","2027-06-09":"端午","2027-09-15":"中秋",
+  "2027-09-28":"教師節","2027-10-10":"國慶","2027-10-11":" ","2027-10-25":"光復節","2027-12-24":" ","2027-12-25":"行憲日","2027-12-31":" "
 };
 let holidaySource="fallback"; // 'live' 已抓到官方資料 / 'fallback' 使用內建清單
 function isHoliday(iso){ return !!TW_HOLIDAYS[iso]; }
@@ -482,7 +483,25 @@ function neededYears(){
   return [...ys].sort();
 }
 
-/* 抓取單一年度並併入 TW_HOLIDAYS */
+/* 節日名稱簡短化（表頭空間有限，補假不顯示名稱只變色） */
+function shortHolidayName(desc){
+  if(!desc) return "";
+  const d=desc.trim();
+  if(d==="補假"||d==="調整放假"||d==="調整上班"||d==="補行上班") return " "; // 補假類仍算假日但不顯示名稱（空白佔位，維持 truthy）
+  const map={
+    "開國紀念日":"元旦","農曆除夕":"除夕","小年夜":"小年夜","春節":"春節",
+    "和平紀念日":"和平日","兒童節":"兒童節","民族掃墓節":"清明","清明節":"清明",
+    "兒童節及民族掃墓節":"兒童清明","勞動節":"勞動節","端午節":"端午","中秋節":"中秋",
+    "孔子誕辰紀念日/教師節":"教師節","孔子誕辰紀念日":"教師節","教師節":"教師節",
+    "國慶日":"國慶","臺灣光復暨金門古寧頭大捷紀念日":"光復節","臺灣光復節":"光復節",
+    "行憲紀念日":"行憲日"
+  };
+  if(map[d]) return map[d];
+  return d.length>3 ? d.slice(0,3) : d; // 未知節日取前3字
+}
+function holidayName(iso){ const v=TW_HOLIDAYS[iso]; return (typeof v==="string")?v:""; }
+
+/* 抓取單一年度並併入 TW_HOLIDAYS（值為簡短節日名稱字串） */
 async function fetchYearHolidays(year){
   const url="https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/"+year+".json";
   const res=await fetch(url,{cache:"force-cache"});
@@ -493,7 +512,7 @@ async function fetchYearHolidays(year){
     // 只取「放假且有節日說明」者為國定假日（純週末無 description，補假亦計入放假）
     if(e.isHoliday && e.description && e.description.trim()){
       const s=e.date; // YYYYMMDD
-      map[s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8)]=1;
+      map[s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8)]=shortHolidayName(e.description);
     }
   });
   return map;
@@ -763,7 +782,8 @@ function render(){
   let head=`<thead><tr><th class="c-title">職稱</th><th class="c-name">姓名</th>`;
   days.forEach(o=>{
     let cls="day-col";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";if(o.dow===SAT)cls+=" closed";if(o.iso===tIso)cls+=" today";
-    const tag=o.dow===SAT?'<div class="closedtag">店休</div>':'';
+    const hn=isHoliday(o.iso)?holidayName(o.iso).trim():"";
+    const tag=o.dow===SAT?'<div class="closedtag">店休</div>':(hn?`<div class="holidaytag">${hn}</div>`:'');
     head+=`<th class="${cls}"><div class="dnum">${o.dd}</div><div class="dow">${o.label}</div>${tag}</th>`;
   });
   head+=`<th class="c-total">總時數</th><th class="c-rest">月休</th></tr></thead>`;
@@ -1031,6 +1051,7 @@ function buildScheduleCanvas(){
     ctx.font=F(13,"700");ctx.fillText(o.dd,x+P.day/2,y+18);
     ctx.font=F(10,"400");ctx.fillText(o.label,x+P.day/2,y+31);
     if(o.dow===SAT){ctx.font=F(8,"400");ctx.fillText("店休",x+P.day/2,y+41);}
+    else if(isHoliday(o.iso)){const hn=holidayName(o.iso).trim();if(hn){ctx.fillStyle="#c0392b";ctx.font=F(8,"700");ctx.fillText(hn,x+P.day/2,y+41);}}
     x+=P.day;
   });
   cell(x,y,P.total,headH,C.headBg,"總時數",C.headInk,12,"600");x+=P.total;
@@ -1096,7 +1117,7 @@ function buildScheduleCanvas(){
 }
 function exportImage(){
   const cv=buildScheduleCanvas();
-  cv.toBlob(b=>{const a=document.createElement("a"),stamp=new Date().toISOString().slice(0,10);a.href=URL.createObjectURL(b);a.download=`排班表_${curSch().name}_${stamp}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},"image/png");
+  cv.toBlob(b=>{const a=document.createElement("a"),stamp=new Date().toISOString().slice(0,10);a.href=URL.createObjectURL(b);a.download=`排班表_${schedDateLabel(curSch())}_${stamp}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);},"image/png");
 }
 
 function exportJSON(){
