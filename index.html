@@ -336,6 +336,7 @@
   <span id="syncBadge" class="syncbadge wait" title="雲端同步狀態">● 連線中…</span>
   <button class="gold b-admin" onclick="autoFill()">自動填入空格</button>
   <button class="b-admin" onclick="clearAll()">清空</button>
+  <button id="undoBtn" class="b-admin" onclick="undoGrid()" style="display:none">↩ 復原</button>
   <span class="spacer"></span>
   <button id="themeBtn" onclick="toggleTheme()"><span id="themeIcon"></span><span id="themeLbl"></span></button>
   <button class="b-va" onclick="exportImage()">匯出圖片</button>
@@ -617,12 +618,16 @@ let db=null, fbReady=false, applyingRemote=false;
 let state=load(), DAYS=[], mode="view", activeId="s1";
 
 function schedDateLabel(sch){
-  /* 產生 "m/d~m/d" 格式的日期標籤 */
+  /* 產生帶年份的日期標籤，例如 "2026 7/13~8/9"；跨年則 "2026/12/28~2027/1/24" */
   const [y,mo,d]=sch.startDate.split("-").map(Number);
   const base=new Date(y,mo-1,d);
   const last=new Date(y,mo-1,d+sch.days-1);
-  const fmt=dt=>(dt.getMonth()+1)+"/"+dt.getDate();
-  return fmt(base)+"~"+fmt(last);
+  const by=base.getFullYear(), ly=last.getFullYear();
+  const md=dt=>(dt.getMonth()+1)+"/"+dt.getDate();
+  if(by===ly){
+    return by+" "+md(base)+"~"+md(last);              // 同年：2026 7/13~8/9
+  }
+  return by+"/"+md(base)+"~"+ly+"/"+md(last);          // 跨年：2026/12/28~2027/1/24
 }
 function normalizeState(s){
   if(!s.meta)s.meta={};
@@ -733,6 +738,8 @@ function toggleLeaveActive(){
 function switchSchedule(id){
   if(id===activeId)return;
   activeId=id; clearSelection(); document.body.classList.remove("leave-editing");
+  // 切到別張班表時，復原快照失效（快照只對原班表有效）
+  if(id!==snapshotSchedId){ gridSnapshot=null; hideUndo(); }
   applyMode(); render();
 }
 function renderTabs(){
@@ -996,8 +1003,31 @@ function saveEmp(){
 }
 function resetEmp(){if(empIndex<0)return;const p=state.staff[empIndex];p.allow=[];p.targetHours=undefined;p.note="";closeEmp();render();}
 
+/* ===== 復原機制：自動填入 / 清空前先存快照 ===== */
+let gridSnapshot=null, snapshotSchedId=null, snapshotAction="";
+function saveGridSnapshot(action){
+  gridSnapshot=JSON.parse(JSON.stringify(curSch().grid));
+  snapshotSchedId=activeId;
+  snapshotAction=action;
+  const btn=document.getElementById("undoBtn");
+  if(btn){ btn.style.display=""; btn.textContent="↩ 復原"+(action?("（"+action+"）"):""); }
+}
+function undoGrid(){
+  if(!gridSnapshot){ return; }
+  // 只能復原到當初做動作的那張班表
+  const target=state.schedules.find(s=>s.id===snapshotSchedId);
+  if(!target){ hideUndo(); return; }
+  if(!confirm("確定要復原剛才的「"+snapshotAction+"」嗎?會還原到動作前的狀態。"))return;
+  target.grid=JSON.parse(JSON.stringify(gridSnapshot));
+  gridSnapshot=null;
+  hideUndo();
+  if(activeId!==snapshotSchedId) switchSchedule(snapshotSchedId); else render();
+}
+function hideUndo(){ const b=document.getElementById("undoBtn"); if(b)b.style.display="none"; }
+
 function autoFill(){
-  if(!confirm("自動填入空格會把空白格子平均排上休假與預設班別當起點(已填的不動,週六店休自動跳過)。\n會盡量避開每位員工不可上的班別。之後請依實際情況微調時數。要繼續嗎?"))return;
+  if(!confirm("自動填入空格會把空白格子平均排上休假與預設班別當起點(已填的不動,週六店休自動跳過)。\n會盡量避開每位員工不可上的班別。之後請依實際情況微調時數。\n\n填入後可按「↩ 復原」返回上一步。要繼續嗎?"))return;
+  saveGridSnapshot("自動填入");
   const days=dayList().filter(o=>o.dow!==SAT&&!isHoliday(o.iso)),restTarget=calcTargetRest(curSch());
   state.staff.forEach((p,si)=>{
     const allow=(p.allow&&p.allow.length)?p.allow:state.shifts.map(s=>s.code);
@@ -1014,7 +1044,7 @@ function autoFill(){
   });
   render();
 }
-function clearAll(){if(!confirm("確定清空整張班表嗎?建議先按「匯出備份」再清。"))return;curSch().grid={};render();}
+function clearAll(){if(!confirm("確定清空整張班表嗎?建議先按「匯出備份」再清。\n\n清空後可按「↩ 復原」返回上一步。"))return;saveGridSnapshot("清空");curSch().grid={};render();}
 
 /* ===== 匯出圖片(整張班表畫成 PNG,不受捲動裁切)===== */
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
