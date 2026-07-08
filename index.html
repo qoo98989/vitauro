@@ -146,6 +146,11 @@
   tbody tr:hover td{box-shadow:inset 0 0 0 999px rgba(194,161,104,.13)}
   tbody tr:hover td.c-name,tbody tr:hover td.c-title{background:var(--gold-soft)}
   body.dark tbody tr:hover td{box-shadow:inset 0 0 0 999px rgba(205,176,121,.12)}
+  /* 滑鼠移到某日期欄 → 整欄(含表頭/底部)直排高亮 */
+  td.col-hl,th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.15)}
+  thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.22)}
+  body.dark td.col-hl,body.dark th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.14)}
+  body.dark thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.2)}
   body.m-admin td.cell,body.m-leave td.cell{cursor:pointer}
   body.m-admin td.cell:hover,body.m-leave td.cell:hover{outline:2px solid var(--gold);outline-offset:-2px}
   body.m-leave:not(.leave-editing) td.cell{cursor:default}
@@ -827,11 +832,11 @@ function render(){
   const t=document.getElementById("schedule");
 
   let head=`<thead><tr><th class="c-title">職稱</th><th class="c-name">姓名</th>`;
-  days.forEach(o=>{
+  days.forEach((o,di)=>{
     let cls="day-col";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";if(o.dow===SAT)cls+=" closed";if(o.iso===tIso)cls+=" today";
     const hn=isHoliday(o.iso)?holidayName(o.iso).trim():"";
     const tag=o.dow===SAT?'<div class="closedtag">店休</div>':(hn?`<div class="holidaytag">${hn}</div>`:'');
-    head+=`<th class="${cls}"><div class="dnum">${o.dd}</div><div class="dow">${o.label}</div>${tag}</th>`;
+    head+=`<th class="${cls}" data-di="${di}"><div class="dnum">${o.dd}</div><div class="dow">${o.label}</div>${tag}</th>`;
   });
   head+=`<th class="c-total">總時數</th><th class="c-rest">月休</th></tr></thead>`;
 
@@ -842,7 +847,7 @@ function render(){
     let hours=0,rest=0;
     days.forEach((o,di)=>{
       if(o.dow===SAT){
-        body+=`<td class="closed" title="週六店休">休</td>`;
+        body+=`<td class="closed" data-di="${di}" title="週六店休">休</td>`;
         rest++; // 週六公休算進月休
         return;
       }
@@ -877,18 +882,45 @@ function render(){
   body+="</tbody>";
 
   let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">早/午/晚診人數</td>`;
-  days.forEach(o=>{
-    if(o.dow===SAT){foot+=`<td class="closed">—</td>`;return;}
+  days.forEach((o,di)=>{
+    if(o.dow===SAT){foot+=`<td class="closed" data-di="${di}">—</td>`;return;}
     const {m,n,e}=sessionCounts(o.iso);
     let cls="sess";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";
     const loMN=v=>v<=1?' class="lo"':'', loE=v=>v<=2?' class="lo"':'';  // 早/午≤1、晚診≤2 標紅
     const mCell=(m===null)?`<span class="sp">—</span>`:`<span${loMN(m)}>${m}</span>`;  // 週日無早診
-    foot+=`<td class="${cls}">${mCell}<span class="sp">/</span><span${loMN(n)}>${n}</span><span class="sp">/</span><span${loE(e)}>${e}</span></td>`;
+    foot+=`<td class="${cls}" data-di="${di}">${mCell}<span class="sp">/</span><span${loMN(n)}>${n}</span><span class="sp">/</span><span${loE(e)}>${e}</span></td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
 
   t.innerHTML=head+body+foot;
   save();
+}
+
+/* 欄位(日期)直排高亮：事件委派綁在 table 上一次，不受 innerHTML 重建影響 */
+let colHlBound=false;
+function setupColumnHighlight(){
+  if(colHlBound)return;
+  const t=document.getElementById("schedule"); if(!t)return;
+  colHlBound=true;
+  let curDi=null;
+  function clearHl(){
+    if(curDi===null)return;
+    t.querySelectorAll(".col-hl").forEach(el=>el.classList.remove("col-hl"));
+    curDi=null;
+  }
+  function setHl(di){
+    if(di===curDi)return;
+    clearHl();
+    if(di===null||di===undefined)return;
+    t.querySelectorAll(`[data-di="${di}"]`).forEach(el=>el.classList.add("col-hl"));
+    curDi=di;
+  }
+  t.addEventListener("mouseover",e=>{
+    const cell=e.target.closest("[data-di]");
+    if(!cell||!t.contains(cell)){return;}
+    setHl(cell.getAttribute("data-di"));
+  });
+  t.addEventListener("mouseleave",clearHl);
 }
 
 function renderLegend(){
@@ -1283,6 +1315,7 @@ applyMode();
 render();
 initFirebase();
 loadHolidays();   // 自動抓取台灣國定假日（線上）；失敗則沿用內建後備清單
+setupColumnHighlight();   // 啟用日期欄位直排高亮
 </script>
 </body>
 </html>
