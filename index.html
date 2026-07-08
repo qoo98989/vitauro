@@ -878,8 +878,8 @@ function render(){
     if(o.dow===SAT){foot+=`<td class="closed">—</td>`;return;}
     const {m,n,e}=sessionCounts(o.iso);
     let cls="sess";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";
-    const lo=v=>v<=1?' class="lo"':'';
-    foot+=`<td class="${cls}"><span${lo(m)}>${m}</span><span class="sp">/</span><span${lo(n)}>${n}</span><span class="sp">/</span><span${lo(e)}>${e}</span></td>`;
+    const loMN=v=>v<=1?' class="lo"':'', loE=v=>v<=2?' class="lo"':'';  // 早/午≤1、晚診≤2 標紅
+    foot+=`<td class="${cls}"><span${loMN(m)}>${m}</span><span class="sp">/</span><span${loMN(n)}>${n}</span><span class="sp">/</span><span${loE(e)}>${e}</span></td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
 
@@ -1157,7 +1157,7 @@ function buildScheduleCanvas(){
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
     const {m,n,e}=sessionCounts(o.iso);
     const bg=(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:C.foot;
-    const low=(m<=1||n<=1||e<=1);
+    const low=(m<=1||n<=1||e<=2);
     cell(x,y,P.day,footH,bg,m+"/"+n+"/"+e,low?C.warn:C.muted,11,"600");x+=P.day;
   });
   cell(x,y,P.total,footH,C.foot,"",C.muted);x+=P.total;
