@@ -124,7 +124,7 @@
   .gridbox::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:7px;border:3px solid var(--head-bg)}
   .gridbox::-webkit-scrollbar-thumb:hover{background:var(--muted)}
   table{border-collapse:separate;border-spacing:0;width:100%;white-space:nowrap;user-select:none}
-  th,td{border-right:1px solid var(--line);border-bottom:2px solid var(--row-line);text-align:center;padding:0}
+  th,td{border-right:1.5px solid var(--line);border-bottom:2px solid var(--row-line);text-align:center;padding:0}
   thead th{position:sticky;top:0;z-index:20;background:var(--head-bg);color:var(--head-ink);font-weight:600;height:46px;font-size:12px}
   thead th.sun{background:var(--sun);color:var(--sun-ink)}
   thead th.today{background:var(--gold-soft);color:#8c6f3c}
@@ -133,7 +133,7 @@
   .closedtag{font-size:9px;letter-spacing:1px;margin-top:1px;opacity:.85}
   .holidaytag{font-size:8px;letter-spacing:0;margin-top:1px;color:#c0392b;font-weight:600;line-height:1;white-space:nowrap}
   .c-title{position:sticky;left:0;z-index:30;background:var(--head-bg);min-width:60px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:600}
-  .c-name{position:sticky;left:60px;z-index:30;background:var(--surface);min-width:84px;padding:0 12px;font-weight:600;text-align:left;border-right:1px solid var(--line);letter-spacing:1px}
+  .c-name{position:sticky;left:60px;z-index:30;background:var(--surface);min-width:84px;padding:0 12px;font-weight:600;text-align:left;border-right:1.5px solid var(--line);letter-spacing:1px}
   body.m-admin tbody td.c-name{cursor:pointer}
   body.m-admin tbody td.c-name:hover{color:var(--gold)}
   .ruledot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-left:5px;vertical-align:middle}
@@ -173,7 +173,7 @@
     background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px)}
   .c-total,.c-rest{position:sticky;background:var(--surface);font-variant-numeric:tabular-nums;font-weight:600;min-width:74px;padding:0 8px}
   thead .c-total,thead .c-rest{background:var(--head-bg)}
-  .c-total{right:74px;border-left:1px solid var(--line)}
+  .c-total{right:74px;border-left:1.5px solid var(--line)}
   .c-rest{right:0}
   .pill{display:inline-block;padding:2px 7px;border-radius:7px;font-size:12px;font-family:var(--mono)}
   .pill.ok{background:var(--ok-soft);color:var(--ok)}
@@ -896,7 +896,8 @@ function render(){
   save();
 }
 
-/* 欄位(日期)直排高亮：事件委派綁在 table 上一次，不受 innerHTML 重建影響 */
+/* 欄位(日期)直排高亮：僅在滑鼠移到「日期表頭那一列」時觸發。
+   事件委派綁在 table 上一次，不受 innerHTML 重建影響 */
 let colHlBound=false;
 function setupColumnHighlight(){
   if(colHlBound)return;
@@ -916,9 +917,11 @@ function setupColumnHighlight(){
     curDi=di;
   }
   t.addEventListener("mouseover",e=>{
-    const cell=e.target.closest("[data-di]");
-    if(!cell||!t.contains(cell)){return;}
-    setHl(cell.getAttribute("data-di"));
+    // 只有游標在「表頭(thead)的日期格」上才高亮整欄
+    const th=e.target.closest("thead th[data-di]");
+    if(th && t.contains(th)){ setHl(th.getAttribute("data-di")); return; }
+    // 游標移到非表頭區域(員工格/footer)→ 取消高亮
+    clearHl();
   });
   t.addEventListener("mouseleave",clearHl);
 }
