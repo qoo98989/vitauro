@@ -791,7 +791,7 @@ function shiftSessions(sh){
     night:   /\b17[:：]30/.test(t) || /\b1[89][:：]/.test(t) || /\b20[:：]/.test(t) // 含 17:30/18/19/20 → 晚診
   };
 }
-/* 計算某天三診人數 */
+/* 計算某天三診人數（星期日早診不營業，早診回傳 null） */
 function sessionCounts(iso){
   let m=0,n=0,e=0;
   state.staff.forEach(p=>{
@@ -801,6 +801,9 @@ function sessionCounts(iso){
     const s=shiftSessions(sh);
     if(s.morning)m++; if(s.noon)n++; if(s.night)e++;
   });
+  // 星期日無早診（沒營業）
+  const dow=new Date(iso+"T00:00:00").getDay();
+  if(dow===SUNDAY) m=null;
   return {m,n,e};
 }
 
@@ -879,7 +882,8 @@ function render(){
     const {m,n,e}=sessionCounts(o.iso);
     let cls="sess";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";
     const loMN=v=>v<=1?' class="lo"':'', loE=v=>v<=2?' class="lo"':'';  // 早/午≤1、晚診≤2 標紅
-    foot+=`<td class="${cls}"><span${loMN(m)}>${m}</span><span class="sp">/</span><span${loMN(n)}>${n}</span><span class="sp">/</span><span${loE(e)}>${e}</span></td>`;
+    const mCell=(m===null)?`<span class="sp">—</span>`:`<span${loMN(m)}>${m}</span>`;  // 週日無早診
+    foot+=`<td class="${cls}">${mCell}<span class="sp">/</span><span${loMN(n)}>${n}</span><span class="sp">/</span><span${loE(e)}>${e}</span></td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
 
@@ -1157,8 +1161,9 @@ function buildScheduleCanvas(){
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
     const {m,n,e}=sessionCounts(o.iso);
     const bg=(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:C.foot;
-    const low=(m<=1||n<=1||e<=2);
-    cell(x,y,P.day,footH,bg,m+"/"+n+"/"+e,low?C.warn:C.muted,11,"600");x+=P.day;
+    const low=((m!==null&&m<=1)||n<=1||e<=2);
+    const mTxt=(m===null)?"—":m;
+    cell(x,y,P.day,footH,bg,mTxt+"/"+n+"/"+e,low?C.warn:C.muted,11,"600");x+=P.day;
   });
   cell(x,y,P.total,footH,C.foot,"",C.muted);x+=P.total;
   cell(x,y,P.rest,footH,C.foot,"",C.muted);x+=P.rest;
