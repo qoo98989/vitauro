@@ -601,7 +601,8 @@ const DEFAULT={
     {id:"s12",startDate:"2027-04-19",days:28,grid:{}}
   ]
 };
-const REST="休", SREST="特休", MLEAVE="產假", STORE_KEY="clinic_schedule_v2", THEME_KEY="clinic_theme", LEAVE_KEY="clinic_leave_open", WD=["日","一","二","三","四","五","六"];
+const REST="休", SREST="特休", MLEAVE="產假", STORE_KEY="clinic_schedule_v2", THEME_KEY="clinic_theme", LEAVE_KEY="clinic_leave_open", ACTIVE_KEY="clinic_active_sched", WD=["日","一","二","三","四","五","六"];
+function saveActive(){try{localStorage.setItem(ACTIVE_KEY,activeId);}catch(e){}}
 const SAT=6, SUNDAY=0;
 /* ===== Firebase 即時同步 ===== */
 const firebaseConfig = {
@@ -685,15 +686,19 @@ function onStateSnap(snap){
   } finally { applyingRemote=false; fbReady=true; }
 }
 let unlocked=false;       // 管理模式(本機,需密碼)
-let leaveFlags={};        // 各班表預假開關(雲端,可各自獨立)
+let leaveFlags={}, leaveInit=false;   // 各班表預假開關(雲端);leaveInit=首次快照後才允許自動跳頁
 function onLeaveSnap(snap){
   const v=snap.val();
   const nf=(v&&typeof v==="object")?v:{};
   let newlyOpen=null;
-  for(const id in nf){ if(nf[id] && !leaveFlags[id]) newlyOpen=id; }
+  // 只有「連線後的即時變動」才自動跳頁;第一次載入不跳(避免每次都被拉到殘留的開放班表)
+  if(leaveInit){
+    for(const id in nf){ if(nf[id] && !leaveFlags[id]) newlyOpen=id; }
+  }
   leaveFlags=nf;
-  // 某班表「剛被開放」→ 非管理裝置自動跳到那份班表進入預假
-  if(newlyOpen && !unlocked){ activeId=newlyOpen; document.body.classList.remove("leave-editing"); }
+  leaveInit=true;
+  // 某班表「剛被開放(即時)」→ 非管理裝置自動跳到那份班表進入預假
+  if(newlyOpen && !unlocked){ activeId=newlyOpen; saveActive(); document.body.classList.remove("leave-editing"); }
   applyMode(); render();
 }
 function initFirebase(){
@@ -737,7 +742,7 @@ function toggleLeaveActive(){
 /* 切換班表分頁(本機;每台可看不同份) */
 function switchSchedule(id){
   if(id===activeId)return;
-  activeId=id; clearSelection(); document.body.classList.remove("leave-editing");
+  activeId=id; saveActive(); clearSelection(); document.body.classList.remove("leave-editing");
   // 切到別張班表時，復原快照失效（快照只對原班表有效）
   if(id!==snapshotSchedId){ gridSnapshot=null; hideUndo(); }
   applyMode(); render();
@@ -1231,6 +1236,8 @@ document.getElementById("logoDark").src="data:image/png;base64,iVBORw0KGgoAAAANS
 
 let savedTheme="light";try{savedTheme=localStorage.getItem(THEME_KEY)||"light";}catch(e){}
 applyTheme(savedTheme);
+// 回到這台裝置上一次看的班表分頁(找不到就用第一份)
+try{const sa=localStorage.getItem(ACTIVE_KEY); if(sa && state.schedules.some(s=>s.id===sa)) activeId=sa;}catch(e){}
 applyMode();
 render();
 initFirebase();
