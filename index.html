@@ -147,10 +147,10 @@
   tbody tr:hover td.c-name,tbody tr:hover td.c-title{background:var(--gold-soft)}
   body.dark tbody tr:hover td{box-shadow:inset 0 0 0 999px rgba(205,176,121,.12)}
   /* 滑鼠移到某日期欄 → 整欄(含表頭/底部)直排高亮 */
-  td.col-hl,th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.15)}
-  thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.22)}
-  body.dark td.col-hl,body.dark th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.14)}
-  body.dark thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.2)}
+  td.col-hl,th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.15), inset 2px 0 0 var(--gold), inset -2px 0 0 var(--gold)}
+  thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(194,161,104,.22), inset 2px 0 0 var(--gold), inset -2px 0 0 var(--gold)}
+  body.dark td.col-hl,body.dark th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.14), inset 2px 0 0 var(--gold), inset -2px 0 0 var(--gold)}
+  body.dark thead th.col-hl{box-shadow:inset 0 0 0 999px rgba(205,176,121,.2), inset 2px 0 0 var(--gold), inset -2px 0 0 var(--gold)}
   body.m-admin td.cell,body.m-leave td.cell{cursor:pointer}
   body.m-admin td.cell:hover,body.m-leave td.cell:hover{outline:2px solid var(--gold);outline-offset:-2px}
   body.m-leave:not(.leave-editing) td.cell{cursor:default}
