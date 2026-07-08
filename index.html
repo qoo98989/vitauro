@@ -176,6 +176,9 @@
   tfoot td{background:var(--foot-bg);height:36px;font-size:12px;color:var(--muted);font-family:var(--mono);font-weight:600}
   tfoot .c-title,tfoot .c-name{background:var(--foot-bg);color:var(--muted);font-family:var(--font);font-weight:600;text-align:right;padding-right:12px}
   tfoot td.lo{color:var(--warn)}
+  tfoot td.sess{font-family:var(--mono);font-size:11px;letter-spacing:0;padding:0 2px}
+  tfoot td.sess span.lo{color:var(--warn);font-weight:700}
+  tfoot td.sess .sp{color:var(--line-strong);margin:0 1px;font-weight:400}
   tfoot td.sun{background:var(--sun)}
   tfoot td.closed{background:var(--foot-bg);color:var(--closed-ink)}
 
@@ -776,6 +779,31 @@ function dayList(){
   return out;
 }
 function shiftByCode(c){return state.shifts.find(s=>s.code===c);}
+
+/* ===== 診別判斷：從班別時段字串解析涵蓋哪些診 =====
+   早診 09:00~12:00 / 午診 14:00~17:00 / 晚診 17:30~20:00
+   從 times 字串(如 "09:00–12:00 / 14:00–17:00")偵測各時段起始時刻 */
+function shiftSessions(sh){
+  const t=(sh&&sh.times)?sh.times:"";
+  return {
+    morning: /\b0?9[:：]/.test(t),                    // 含 09: 開頭 → 早診
+    noon:    /\b14[:：]/.test(t),                     // 含 14: 開頭 → 午診
+    night:   /\b17[:：]30/.test(t) || /\b1[89][:：]/.test(t) || /\b20[:：]/.test(t) // 含 17:30/18/19/20 → 晚診
+  };
+}
+/* 計算某天三診人數 */
+function sessionCounts(iso){
+  let m=0,n=0,e=0;
+  state.staff.forEach(p=>{
+    const code=curSch().grid[p.name+"__"+iso];
+    if(!code||code===REST||code===SREST||code===MLEAVE)return;
+    const sh=shiftByCode(code); if(!sh)return;
+    const s=shiftSessions(sh);
+    if(s.morning)m++; if(s.noon)n++; if(s.night)e++;
+  });
+  return {m,n,e};
+}
+
 function fmt(o){return parseInt(o.iso.split("-")[1])+"/"+o.dd;}
 function personTarget(p){
   const autoH=calcTargetHours(curSch());
@@ -845,11 +873,13 @@ function render(){
   });
   body+="</tbody>";
 
-  let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">上班人數</td>`;
+  let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">早/午/晚診人數</td>`;
   days.forEach(o=>{
     if(o.dow===SAT){foot+=`<td class="closed">—</td>`;return;}
-    let n=0;state.staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
-    let cls="";if(o.dow===SUNDAY||isHoliday(o.iso))cls="sun";if(n<=1)cls+=" lo";foot+=`<td class="${cls}">${n}</td>`;
+    const {m,n,e}=sessionCounts(o.iso);
+    let cls="sess";if(o.dow===SUNDAY||isHoliday(o.iso))cls+=" sun";
+    const lo=v=>v<=1?' class="lo"':'';
+    foot+=`<td class="${cls}"><span${lo(m)}>${m}</span><span class="sp">/</span><span${lo(n)}>${n}</span><span class="sp">/</span><span${lo(e)}>${e}</span></td>`;
   });
   foot+=`<td class="c-total"></td><td class="c-rest"></td></tr></tfoot>`;
 
@@ -1122,11 +1152,13 @@ function buildScheduleCanvas(){
 
   x=0;
   cell(x,y,P.title,footH,C.foot,"",C.muted);x+=P.title;
-  cell(x,y,P.name,footH,C.foot,"每日上班人數",C.muted,11,"600");x+=P.name;
+  cell(x,y,P.name,footH,C.foot,"早/午/晚診人數",C.muted,11,"600");x+=P.name;
   days.forEach(o=>{
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
-    let n=0;staff.forEach(p=>{const c=curSch().grid[p.name+"__"+o.iso];if(c&&c!==REST&&c!==SREST&&c!==MLEAVE)n++;});
-    cell(x,y,P.day,footH,(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:C.foot,String(n),n<=1?C.warn:C.muted,11,"600");x+=P.day;
+    const {m,n,e}=sessionCounts(o.iso);
+    const bg=(o.dow===SUNDAY||isHoliday(o.iso))?C.sun:C.foot;
+    const low=(m<=1||n<=1||e<=1);
+    cell(x,y,P.day,footH,bg,m+"/"+n+"/"+e,low?C.warn:C.muted,11,"600");x+=P.day;
   });
   cell(x,y,P.total,footH,C.foot,"",C.muted);x+=P.total;
   cell(x,y,P.rest,footH,C.foot,"",C.muted);x+=P.rest;
