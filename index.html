@@ -133,7 +133,7 @@
   .closedtag{font-size:9px;letter-spacing:1px;margin-top:1px;opacity:.85}
   .holidaytag{font-size:8px;letter-spacing:0;margin-top:1px;color:#c0392b;font-weight:600;line-height:1;white-space:nowrap}
   .c-title{position:sticky;left:0;z-index:30;background:var(--head-bg);min-width:60px;padding:0 8px;font-size:12px;color:var(--muted);font-weight:600}
-  .c-name{position:sticky;left:60px;z-index:30;background:var(--surface);min-width:84px;padding:0 12px;font-weight:600;text-align:left;border-right:1.5px solid var(--line);letter-spacing:1px}
+  .c-name{position:sticky;left:60px;z-index:30;background:var(--surface);min-width:64px;padding:0 8px;font-weight:600;text-align:left;border-right:1.5px solid var(--line);letter-spacing:0}
   body.m-admin tbody td.c-name{cursor:pointer}
   body.m-admin tbody td.c-name:hover{color:var(--gold)}
   .ruledot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-left:5px;vertical-align:middle}
@@ -881,7 +881,7 @@ function render(){
   });
   body+="</tbody>";
 
-  let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">早/午/晚診人數</td>`;
+  let foot=`<tfoot><tr><td class="c-title"></td><td class="c-name">人數</td>`;
   days.forEach((o,di)=>{
     if(o.dow===SAT){foot+=`<td class="closed" data-di="${di}">—</td>`;return;}
     const {m,n,e}=sessionCounts(o.iso);
@@ -1191,7 +1191,7 @@ function buildScheduleCanvas(){
 
   x=0;
   cell(x,y,P.title,footH,C.foot,"",C.muted);x+=P.title;
-  cell(x,y,P.name,footH,C.foot,"早/午/晚診人數",C.muted,11,"600");x+=P.name;
+  cell(x,y,P.name,footH,C.foot,"人數",C.muted,11,"600");x+=P.name;
   days.forEach(o=>{
     if(o.dow===SAT){cell(x,y,P.day,footH,C.foot,"—",C.muted,11,"600");x+=P.day;return;}
     const {m,n,e}=sessionCounts(o.iso);
