@@ -170,6 +170,13 @@
   .mleave-tx{color:var(--mleave);font-weight:700}
   td.cell.selected{box-shadow:inset 0 0 0 2px var(--gold),inset 0 0 0 200px rgba(194,161,104,.22)}
   td.cell.violation::after{content:"";position:absolute;top:0;right:0;border-width:0 8px 8px 0;border-style:solid;border-color:transparent var(--bad) transparent transparent}
+  /* 鎖定的格子:金色實線邊框 + 左上角小鎖頭 */
+  td.cell.locked{box-shadow:inset 0 0 0 2px var(--gold)}
+  td.cell.locked::before{content:"🔒";position:absolute;top:0px;left:1px;font-size:9px;line-height:1;opacity:.9;pointer-events:none}
+  td.cell.today.locked{box-shadow:inset 0 0 0 2px var(--gold)}
+  /* 鎖定模式時,游標提示可點鎖 */
+  body.lock-mode td.cell{cursor:pointer}
+  body.lock-mode #schedule{outline:2px dashed var(--gold-line);outline-offset:2px}
   td.closed{height:40px;font-size:12px;font-weight:600;color:var(--closed-ink);cursor:default;
     background:repeating-linear-gradient(45deg,var(--closed1),var(--closed1) 5px,var(--closed2) 5px,var(--closed2) 10px)}
   .c-total,.c-rest{position:sticky;background:var(--surface);font-variant-numeric:tabular-nums;font-weight:600;min-width:74px;padding:0 8px}
@@ -350,6 +357,7 @@
   <button class="gold b-admin" onclick="autoFill()">自動填入空格</button>
   <button class="b-admin" onclick="clearAll()">清空</button>
   <button id="undoBtn" class="b-admin" onclick="undoGrid()" style="display:none">↩ 復原</button>
+  <button id="lockCellBtn" class="b-admin" onclick="toggleLockMode()" title="開啟後,點格子可鎖定/解鎖;鎖定的格子不會被自動填入、清空或誤改">🔒 鎖定格子</button>
   <span class="spacer"></span>
   <button id="themeBtn" onclick="toggleTheme()"><span id="themeIcon"></span><span id="themeLbl"></span></button>
   <button class="b-va" onclick="exportImage()">匯出圖片</button>
@@ -660,7 +668,8 @@ function normalizeState(s){
       id:"s"+(i+1),
       startDate:sc.startDate||base.startDate||"2026-06-15",
       days:sc.days||base.days||28,
-      grid:(sc.grid&&typeof sc.grid==="object")?sc.grid:{}
+      grid:(sc.grid&&typeof sc.grid==="object")?sc.grid:{},
+      locks:(sc.locks&&typeof sc.locks==="object")?sc.locks:{}
     };
   }
   s.schedules=s.schedules.slice(0,MAX_SCHEDULES);
@@ -744,7 +753,7 @@ function toggleLeaveEdit(){ document.body.classList.toggle("leave-editing"); cle
 function openPw(){document.getElementById("pwErr").style.display="none";const i=document.getElementById("pwInput");i.value="";document.getElementById("pwOverlay").classList.add("open");setTimeout(()=>i.focus(),50);}
 function closePw(){document.getElementById("pwOverlay").classList.remove("open");}
 function submitPw(){if(document.getElementById("pwInput").value===ADMIN_PW){closePw();unlocked=true;applyMode();render();}else{document.getElementById("pwErr").style.display="block";}}
-function lock(){unlocked=false;document.getElementById("pwOverlay").classList.remove("open");applyMode();render();}
+function lock(){unlocked=false;if(lockMode)toggleLockMode();document.getElementById("pwOverlay").classList.remove("open");applyMode();render();}
 /* 開放/結束「目前這份班表」的預假(各班表獨立) */
 function toggleLeaveActive(){
   const open=!leaveFlags[activeId];
@@ -862,6 +871,7 @@ function render(){
         else if(code===MLEAVE){cls+=" rest mleave";rest++;txt="產假";}
         else if(code){const sh=shiftByCode(code);if(sh){hours+=sh.hours;style=`background:${sh.color}`;}
           if(p.allow&&p.allow.length&&!p.allow.includes(code)){cls+=" violation";ttl=' title="此班別不在該員工的可上班別內"';}}
+        if(isLocked(p.name,o.iso)){cls+=" locked";}
         body+=`<td class="${cls}" style="${style}" data-s="${si}" data-di="${di}" data-iso="${o.iso}"${ttl}>${txt}</td>`;
         return;
       }
@@ -873,6 +883,7 @@ function render(){
       else if(code===MLEAVE){cls+=" rest mleave";rest++;txt="產假";}
       else if(code){const sh=shiftByCode(code);if(sh){hours+=sh.hours;style=`background:${sh.color}`;}
         if(p.allow&&p.allow.length&&!p.allow.includes(code)){cls+=" violation";ttl=' title="此班別不在該員工的可上班別內"';}}
+      if(isLocked(p.name,o.iso)){cls+=" locked";}
       body+=`<td class="${cls}" style="${style}" data-s="${si}" data-di="${di}" data-iso="${o.iso}"${ttl}>${txt}</td>`;
     });
     const hours1=+hours.toFixed(1),tgt=personTarget(p),hDiff=+(hours-tgt).toFixed(1);
@@ -968,6 +979,12 @@ tableEl.addEventListener("mousedown",e=>{
   if(mode!=="admin"&&mode!=="leave")return;
   if(leaveLocked())return;                      // 預假唯讀:未按「開始預假」不可點
   const td=e.target.closest("td.cell");if(!td)return;
+  if(mode==="admin"&&lockMode){                  // 鎖定模式:點一下切換該格鎖定
+    e.preventDefault();
+    toggleCellLock(state.staff[+td.dataset.s].name, DAYS[+td.dataset.di].iso);
+    render();
+    return;
+  }
   e.preventDefault();document.body.classList.add("dragging");
   drag.on=true;drag.aSi=+td.dataset.s;drag.aDi=+td.dataset.di;
   updateSelection(drag.aSi,drag.aDi);
@@ -988,6 +1005,7 @@ tableEl.addEventListener("click",e=>{if(mode!=="admin")return;const nc=e.target.
 function applyLeave(sel){
   if(sel.length===1){
     const c=sel[0],k=c.name+"__"+c.iso,cur=curSch().grid[k];
+    if(isLocked(c.name,c.iso)){ clearSelection();render();return; }  // 鎖定格子不動
     if(cur===REST){
       const d=c.iso.slice(5).replace("-","/");   // 06/21
       if(!confirm("要取消「"+c.name+"」在 "+d+" 的預假嗎?")){ clearSelection();render();return; }
@@ -996,7 +1014,7 @@ function applyLeave(sel){
     else if(!cur) curSch().grid[k]=REST;
     // 若該格已有班別,不更動(保護已排班)
   }else{
-    sel.forEach(c=>{const k=c.name+"__"+c.iso,cur=curSch().grid[k];if(!cur||cur===REST)curSch().grid[k]=REST;});
+    sel.forEach(c=>{if(isLocked(c.name,c.iso))return;const k=c.name+"__"+c.iso,cur=curSch().grid[k];if(!cur||cur===REST)curSch().grid[k]=REST;});
   }
   clearSelection();render();
 }
@@ -1020,6 +1038,7 @@ tableEl.addEventListener("touchend",e=>{
   if(target.classList.contains("c-name")){ if(mode==="admin")openEmp(+target.dataset.si); return; }
   const si=+target.dataset.s, di=+target.dataset.di;
   const sel=[{si,di,iso:DAYS[di].iso,name:state.staff[si].name,dow:DAYS[di].dow}];
+  if(mode==="admin"&&lockMode){ toggleCellLock(sel[0].name,sel[0].iso); render(); return; }  // 鎖定模式:切換該格鎖定
   if(mode==="leave"){ applyLeave(sel); }
   else { clearSelection(); selection=sel; target.classList.add("selected"); openPicker(); }
 });
@@ -1045,9 +1064,32 @@ function openPicker(){
   let left=r.left+window.scrollX;if(left+pw>window.scrollX+window.innerWidth)left=window.scrollX+window.innerWidth-pw-10;
   p.style.left=left+"px";p.style.top=(r.bottom+window.scrollY+4)+"px";
 }
+/* ===== 鎖定格子功能 ===== */
+let lockMode=false;
+function lockKey(name,iso){return name+"__"+iso;}
+function isLocked(name,iso){const L=curSch().locks;return !!(L&&L[lockKey(name,iso)]);}
+function toggleLockMode(){
+  lockMode=!lockMode;
+  const btn=document.getElementById("lockCellBtn");
+  document.body.classList.toggle("lock-mode",lockMode);
+  if(btn){
+    btn.classList.toggle("gold",lockMode);
+    btn.textContent=lockMode?"🔓 完成鎖定":"🔒 鎖定格子";
+  }
+  clearSelection();
+  closePicker();
+}
+function toggleCellLock(name,iso){
+  if(!curSch().locks)curSch().locks={};
+  const k=lockKey(name,iso);
+  if(curSch().locks[k])delete curSch().locks[k];
+  else curSch().locks[k]=1;
+  save();
+}
 function setCell(code){
   selection.forEach(c=>{
     if(code==="早1"&&c.dow===SUNDAY)return;
+    if(isLocked(c.name,c.iso))return;   // 鎖定的格子不改動
     const k=c.name+"__"+c.iso;
     if(code==="")delete curSch().grid[k];else curSch().grid[k]=code;
   });
@@ -1116,6 +1158,7 @@ function autoFill(){
     while(placed<restTarget&&idx<days.length){restSet.add(days[idx].iso);placed++;idx+=step;}
     days.forEach(o=>{
       const key=p.name+"__"+o.iso;if(curSch().grid[key])return;
+      if(isLocked(p.name,o.iso))return;   // 鎖定的格子不動
       if(restSet.has(o.iso)){curSch().grid[key]=REST;return;}
       let d=def; if(d==="早1"&&o.dow===SUNDAY)d=allow.find(c=>c!=="早1")||"晚";
       curSch().grid[key]=d;
@@ -1123,7 +1166,15 @@ function autoFill(){
   });
   render();
 }
-function clearAll(){if(!confirm("確定清空整張班表嗎?建議先按「匯出備份」再清。\n\n清空後可按「↩ 復原」返回上一步。"))return;saveGridSnapshot("清空");curSch().grid={};render();}
+function clearAll(){
+  if(!confirm("確定清空整張班表嗎?(鎖定的格子會保留)\n建議先按「匯出備份」再清。\n\n清空後可按「↩ 復原」返回上一步。"))return;
+  saveGridSnapshot("清空");
+  const locks=curSch().locks||{}, oldGrid=curSch().grid, ng={};
+  // 保留鎖定格子的內容
+  Object.keys(locks).forEach(k=>{ if(oldGrid[k]!==undefined) ng[k]=oldGrid[k]; });
+  curSch().grid=ng;
+  render();
+}
 
 /* ===== 匯出圖片(整張班表畫成 PNG,不受捲動裁切)===== */
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
